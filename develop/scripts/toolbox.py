@@ -277,11 +277,18 @@ class exp_eval:
 
 
 
-class show:
+class Show:
   def __init__(self) -> None:
     pass
 
+  @staticmethod
+  def colorize_heat_map(img, max_val = 3*256-1):
+    img = (img * 255 / max_val).astype(np.uint8)
+    #img = cv.normalize(img, None, alpha=0, beta=255, norm_type=cv.NORM_MINMAX, dtype=cv.CV_8UC1)
 
+    heat_map = cv.applyColorMap(img, cv.COLORMAP_JET)
+    return heat_map
+  
   @staticmethod
   def plot(segs_focus):
     """

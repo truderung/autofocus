@@ -4,11 +4,10 @@ import re
 
 TEMP = tempfile.gettempdir()
 WORK_PATH = Path(__file__).parent.parent
-SRC_PATH = Path(WORK_PATH).parent
 OUT_PATH = Path(WORK_PATH, "out")
 Path.mkdir(OUT_PATH, exist_ok=True)
 print(WORK_PATH)
-exit(0)
+
 # This just as long as auto_focusing is not a package ################
 import sys
 sys.path.append(str(WORK_PATH))

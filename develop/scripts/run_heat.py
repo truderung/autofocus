@@ -6,17 +6,19 @@ import cv2 as cv
 from pathlib import Path
 from addict import Dict
 
-from __internals import *
 from autofocus.toolbox.masker import Masker
+
+from __internals import *
+from toolbox import *
 
 
 IMAGES = {
   #Path(WORK_PATH, '18_57_quad.jpg').as_posix(): [3]
   # Path(WORK_PATH, '18_57.jpg').as_posix(): [3]
-  # Path(WORK_PATH, 'training_data/Stack_1/Original_images/5.jpg').as_posix(): [3],
-  Path(WORK_PATH, 'training_data/Stack_1/Original_images/10.jpg').as_posix(): [3],
-  # Path(WORK_PATH, 'training_data/Stack_1/Original_images/12.jpg').as_posix(): [3]
-  # Path(WORK_PATH, 'training_data/Stack_1/Original_images/16.jpg').as_posix(): [3],
+  # Path(WORK_PATH, 'data/Stack_1/Original_images/5.jpg').as_posix(): [3],
+  Path(WORK_PATH, 'data/Stack_1/Original_images/10.jpg').as_posix(): [3],
+  # Path(WORK_PATH, 'data/Stack_1/Original_images/12.jpg').as_posix(): [3]
+  # Path(WORK_PATH, 'data/Stack_1/Original_images/16.jpg').as_posix(): [3],
 }
 
 TEST_PROGRAMM = {
@@ -111,7 +113,7 @@ def test_heat(verbose = False):
         t = time.time()
         with open(Path(out_path, f"heater_{g}").as_posix(), 'rb') as f:
           heat_map = np.load(f)      
-        heat_map = show.colorize_heat_map(heat_map, max_value)
+        heat_map = Show.colorize_heat_map(heat_map, max_value)
         stat.timings.load_and_map[f"{g}"] = p = time.time()-t
         print(f"load and map for gamma {g}, duration: {p}")
         cv.imwrite(Path(out_path, f"heat_{g}.jpg").as_posix(), heat_map)
