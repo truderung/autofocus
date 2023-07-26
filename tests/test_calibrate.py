@@ -1,8 +1,14 @@
 from autofocus.toolbox.calibrators import *
 from autofocus.toolbox.masker import Masker
 from pathlib import Path
+import numpy as np
 
-IMAGE_PATH = Path('/home/issam/Desktop/Github/auto_focusing/training_data')
+import pytest
+
+
+WORK_PATH = Path(__file__).parent
+
+IMAGE_PATH = Path(WORK_PATH, 'develop')
 
 '''
   Path(IMAGE_PATH, 'Stack_5/Original_images/68.jpg'),
@@ -86,10 +92,6 @@ IMG_STACK_Z_CALIB = [
 
 
 SEG_HEIGHT = 10
-
-print("############################################")
-print("##   Init ")
-
 g = 46
 d = 7
 gamma_range = list(range(g-d, g+d+1))
@@ -97,56 +99,67 @@ level_distribution = [0.005, 0.01, 0.02, 0.05, 0.1]
 width_distribution = [30, 60, 100]
 
 
-masker = Masker((1400, 2660))
-mask = masker.get_mask(gamma_range, level_distribution, width_distribution)
+def test_create_mask():
+    masker = Masker((1400, 2660))
+    mask = masker.get_mask(gamma_range, level_distribution, width_distribution)
+    assert mask.shape == (1400, 2660)
+
+def test_y_calib(test_y_images, test_mask):
+    y_flag, y_correction, all_indexes = CalibrateY()(test_y_images, test_mask, SEG_HEIGHT, 770)
+    assert y_flag == "error" or y_flag == "ok"
+    assert (type(y_correction) == float and y_flag == "ok") or (type(y_correction) == str and y_flag == "error")
+    assert len(all_indexes) != 0
 
 
-y_images = []
+def test_z_calib(z_images, mask, roi, roi_correction):
+    index, old_h_segment = CalibrateZ()(z_images, mask, roi, roi_correction, SEG_HEIGHT)
+    assert type(index) == int
+    assert index >=0 and index <= len(z_images)
+    assert len(old_h_segment) == 1400//SEG_HEIGHT
+    assert type(old_h_segment[0]) == float
 
+
+def test_predict(image, mask, old_h_segment):
+    shift = Predict()(image, mask, SEG_HEIGHT, 770, old_h_segment)
+    assert type(shift) == float
+
+
+
+
+test_create_mask()
+
+
+test_masker = Masker((1400, 2660))
+test_mask = test_masker.get_mask(gamma_range, level_distribution, width_distribution)
+test_y_images = []
 for p in IMG_STACK_Y_CALIB:
     img = cv.imread(p.as_posix(), cv.IMREAD_GRAYSCALE)
-    y_images.append(img)
+    test_y_images.append(img)
 
-z_images = []
 
+test_y_calib(test_y_images, test_mask)
+
+
+_, test_y_correction, _ = CalibrateY()(test_y_images, test_mask, SEG_HEIGHT, 770)
+test_z_images = []
 for p in IMG_STACK_Y_CALIB:
     img = cv.imread(p.as_posix(), cv.IMREAD_GRAYSCALE)
-    z_images.append(img)
+    test_z_images.append(img)
+test_roi = (700//2, 2100//2)
+test_roi_correction = round(test_y_correction/(2 * SEG_HEIGHT * 0.00274))
 
 
-print("############################################")
-print("##   Y_Calibration ")
-
-y_flag, y_correction, all_indexes = CalibrateY()(y_images, mask, SEG_HEIGHT, 770)
-
-if y_flag == "error": print(y_correction)
-if y_flag == "ok": print(f"y_correction = {y_correction}")
-
-print(f"All indexes: {all_indexes}")
+test_z_calib(test_z_images, test_mask, test_roi, test_roi_correction)
 
 
-print("############################################")
-print("##   Z_Calibration ")
-
-roi = (700//2, 2100//2)
-
-roi_correction = round(y_correction/(2 * SEG_HEIGHT * 0.00274))
-
-index, old_h_segment = CalibrateZ()(z_images, mask, roi, roi_correction, SEG_HEIGHT)
-
-print(f"Z_Correction = {index}")
-
-
-print("############################################")
-print("##   Predict ")
+test_index, test_old_h_segment = CalibrateZ()(test_z_images, test_mask, test_roi, test_roi_correction, SEG_HEIGHT)
 
 p = Path(IMAGE_PATH, 'Stack_5/Original_images/31.jpg')
-image = cv.imread(p.as_posix(), cv.IMREAD_GRAYSCALE)
+test_image = cv.imread(p.as_posix(), cv.IMREAD_GRAYSCALE)
+
+test_predict(test_image, test_mask, test_old_h_segment)
 
 
-shift = Predict()(image, mask, SEG_HEIGHT, 770, old_h_segment)
-
-print(f"Shift = {shift}")
 
 '''
 def calibrate_y(h_segments_stack):
