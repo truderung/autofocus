@@ -342,9 +342,15 @@ class CalibrateY(Calibrate):
             if np.std([idx, median_indexes]) <= 2.5:
                 filtered_indexes_max.append(idx)
 
+        nbr_images = len(all_indexes_max)
+        nbr_filtered_images = len(filtered_indexes_max)
+
+        for idx in range(nbr_images):
+          all_indexes_max[idx] = all_indexes_max[idx] * 2 * segment_height
+
         # Check if enough acceptable images are available for calibration
-        if (len(all_indexes_max) - len(filtered_indexes_max)) > len(all_indexes_max) / 2:
-            return "error", f"too less of acceptable images available {len(filtered_indexes_max)} / {len(all_indexes_max)}", all_indexes_max
+        if (nbr_images - nbr_filtered_images) > nbr_images / 2:
+            return "error", f"too less of acceptable images available {nbr_filtered_images} / {nbr_images}", all_indexes_max
 
         # Calculate the Y correction value in millimeters
         y_correction_mm = (median(filtered_indexes_max) - nbr_segments // 2) * 2 * segment_height * 0.00274
