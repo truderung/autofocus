@@ -287,7 +287,7 @@ class CalibrateY(Calibrate):
         @param images (list): List of images to perform Y calibration on.
         @param mask (numpy.ndarray): The DFT mask used for image processing.
         @param segment_height (int): Height of each image segment in pixels.
-        @param region (float): The region to analyze for Y calibration.
+        @param region (float): Distance between Crossing_points in pixels.
 
         @return tuple: A tuple containing the status of calibration ("ok" or "error"),
                        the Y correction value in millimeters, and all the detected indexes.
@@ -377,7 +377,7 @@ class CalibrateZ(Calibrate):
 
     @usage
     ```
-    index = CalibrateZ()(images, mask, roi, roi_correction, segment_height)
+    index, h_segments = CalibrateZ()(images, mask, roi, roi_correction, segment_height)
     ```
     '''
 
@@ -391,7 +391,8 @@ class CalibrateZ(Calibrate):
         @param roi_correction (int): Correction factor for the ROI in segments.
         @param segment_height (int): Height of each segment in pixels.
 
-        @return index (int): Index of the calibrated Z position.
+        @return index (int):             Index of the calibrated Z position.
+        @return h_segments[] (np.array): Segments evaluation of the best focused image
         '''
         return self.__calibrate_z(images, mask, roi, roi_correction, segment_height)
 
@@ -405,7 +406,8 @@ class CalibrateZ(Calibrate):
         @param roi_correction (int): Correction factor for the ROI in segments.
         @param segment_height (int): Height of each segment in pixels.
 
-        @return index (int): Index of the calibrated Z position.
+        @return index (int):             Index of the calibrated Z position.
+        @return h_segments[] (np.array): Segments evaluation of the best focused image  
         '''
 
         h_segments_stack = super().eval_stack(images, mask, segment_height)
@@ -467,7 +469,7 @@ class CalibrateZ(Calibrate):
 
         index = np.where(dft_classifier == 1)[0][0]
 
-        return index
+        return index, h_segments_stack[index]
 
 
 
@@ -523,15 +525,19 @@ class Predict(Calibrate):
 
         FOCUS_in_mm = 0.02  # in mm :: 5% Focus-Differenz entspricht einen Verschiebung von 0.1 mm => 1% entspricht 0.02 mm
 
-        new_h_segment = super().eval_stack(image, mask, segment_height)
+        region = round(region / (2 * segment_height))
+
+        new_h_segment = super().eval_stack([image, image], mask, segment_height)
+
+        new_h_segment = new_h_segment[0]
 
         nbr_segments = len(old_h_segment)
         old_regions = []
         new_regions = []
 
         for idx in range(nbr_segments // 2 - region):
-            old_regions.append(np.mean(old_h_segment[idx:idx + region + 1]))
-            new_regions.append(np.mean(new_h_segment[idx:idx + region + 1]))
+            old_regions.append(np.mean(old_h_segment[idx:idx + region]))
+            new_regions.append(np.mean(new_h_segment[idx:idx + region]))
 
         index_best_old_region = old_regions.index(max(old_regions))
         index_best_new_region = new_regions.index(max(new_regions))
