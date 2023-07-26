@@ -6,7 +6,7 @@ from abc import ABC
 
 class Calibrate(ABC):
   
-  def activation(hist_stack):
+  def activation(self, hist_stack):
     """
     @brief Calculates the activation function for histogram-based image thresholding.
 
@@ -46,7 +46,7 @@ class Calibrate(ABC):
     return weights
 
 
-  def horz_eval(img, weights, seg_height: int = 10):
+  def horz_eval(self, img, weights, seg_height: int = 10):
     """
     @brief Evaluates the focus distribution along the vertical axis in an image.
 
@@ -299,7 +299,7 @@ class CalibrateZ(Calibrate):
     breite = (s_p2 - s_p1) // 2
     center = s_p1 + breite
 
-    def activation_seg(nbr_segment, center, breite, min_coeff, max_coeff):
+    def __activation_seg(nbr_segment, center, breite, min_coeff, max_coeff):
       """
       @brief Calculates the activation weights for segments within the ROI.
 
@@ -327,7 +327,7 @@ class CalibrateZ(Calibrate):
 
       return np.array([__sig(x) for x in range(0, nbr_segment)], dtype=np.float32)
 
-    dft_weights = activation_seg(nbr_segments, center, breite, 0.8, 1)
+    dft_weights = __activation_seg(nbr_segments, center, breite, 0.8, 1)
 
     dft_classifier = []
 
