@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
 from numpy import linalg as la
-from statistics import mean
+from statistics import mean, median
 
 
 PI_180 = np.pi / 180.0
@@ -379,8 +379,6 @@ def calibrate_y(h_segments_stack):
     @return: y_correction:          int       Y-axis correction in segment units.
     """
 
-    from statistics import median
-
     nbr_segments = len(h_segments_stack[0])
     # print(f"Number of segments: {nbr_segments}")
 
@@ -433,6 +431,38 @@ def calibrate_y(h_segments_stack):
         y_correction = int(median(indexes) - nbr_segments // 2)
         return True, y_correction, len(indexes)
 
+
+def calibrate_y_2(h_segments_stack, region):
+
+    # print("##################################################################")
+    # print("Start Y_Calibration_2............")
+
+    nbr_segments = len(h_segments_stack[0])
+    all_indexes_max = []
+    indexes_max = []
+
+    for h_segment in h_segments_stack:
+        max_focus_region = 0
+        idx_max_focus_region = 0
+        for i in range(nbr_segments-region):
+            focus_region = np.mean(h_segment[i:i+region])
+            if focus_region > max_focus_region:
+                max_focus_region = focus_region
+                idx_max_focus_region = i + region//2
+        all_indexes_max.append(idx_max_focus_region)
+   
+    median_indexes = median(all_indexes_max)
+    # std_indexes = np.std(all_indexes_max)
+
+    # print("All indexes: ", all_indexes_max)
+    # print(f"median_indexes : {median_indexes}")
+    # print(f"std_indexes : {std_indexes}")
+
+    for idx in all_indexes_max:
+        if np.std([idx, median_indexes]) <= 2:
+            indexes_max.append(idx)
+    # print("Filtered indexes: ", indexes_max)
+    return (median(indexes_max) - nbr_segments//2) * 20
 
 
 def predict(old_h_segment, new_h_segment, region): # (old_h_segment, region): #
