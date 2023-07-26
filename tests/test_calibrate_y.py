@@ -1,5 +1,5 @@
-from utils import *
-from masker import Masker
+from autofocus.toolbox.calibrators import *
+from autofocus.toolbox.masker import Masker
 from pathlib import Path
 
 IMAGE_PATH = Path('/home/issam/Desktop/Github/auto_focusing/training_data')
