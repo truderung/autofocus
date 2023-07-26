@@ -229,6 +229,7 @@ class CalibrateY(Calibrate):
     return self.__calibrate_y(images, mask, segment_height, region)
 
   def __calibrate_y(self, images, mask, segment_height, region):
+    region = region / (2 * segment_height)
 
     h_segments_stack = super().eval_stack(
       images, mask, segment_height
@@ -255,9 +256,9 @@ class CalibrateY(Calibrate):
         filtered_indexes_max.append(idx)
     
     if (len(all_indexes_max) - len(filtered_indexes_max)) > len(all_indexes_max)/2:
-      return "error", f"too less of acceptable images {len(filtered_indexes_max)} / {len(all_indexes_max)}", all_indexes_max
+      return "error", f"too less of acceptable images available {len(filtered_indexes_max)} / {len(all_indexes_max)}", all_indexes_max
 
-    return "ok", (median(filtered_indexes_max) - nbr_segments//2), all_indexes_max
+    return "ok", (median(filtered_indexes_max) - nbr_segments//2) * 2 * segment_height, all_indexes_max
 
 
 
