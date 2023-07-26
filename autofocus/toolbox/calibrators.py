@@ -229,7 +229,7 @@ class CalibrateY(Calibrate):
     return self.__calibrate_y(images, mask, segment_height, region)
 
   def __calibrate_y(self, images, mask, segment_height, region):
-    region = region / (2 * segment_height)
+    region = round(region / (2 * segment_height))
 
     h_segments_stack = super().eval_stack(
       images, mask, segment_height
