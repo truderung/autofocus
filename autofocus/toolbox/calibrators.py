@@ -23,7 +23,7 @@ class Calibrate(ABC):
   - heat_double(self, orig_img, mask):
       Heats the image in two halves using Discrete Fourier Transform (DFT).
 
-  - eval_stack(self, images, mask, segment_height):
+  - eval_stack(self, images, mask, max_values, max_focuses, segment_height):
       Evaluates the stack of heat maps and computes focus evaluation for each segment.
 
   @usage
@@ -39,7 +39,7 @@ class Calibrate(ABC):
   activation_weights = calibrator.activation(hist_stack)
   focus_distribution = calibrator.horz_eval(image, activation_weights, segment_height)
   heated_image, heated_image_bar = calibrator.heat_double(orig_img, mask)
-  focus_evaluation = calibrator.eval_stack(images, mask, segment_height)
+  focus_evaluation = calibrator.eval_stack(images, mask, max_values, max_focuses, segment_height)
   ```
   '''
 
@@ -167,7 +167,7 @@ class Calibrate(ABC):
     return res, res_bar
   
 
-  def eval_stack(self, images, mask, segment_height):
+  def eval_stack(self, images, mask, max_values, max_focuses, segment_height, PREDICT=False):
     """
     @brief Evaluates the stack of heat maps and computes focus evaluation for each segment.
 
@@ -176,39 +176,44 @@ class Calibrate(ABC):
     It calculates the histograms for each heat map, computes the activation weights,
       and evaluates the focus distribution for each segment using the `horz_eval` function.
 
-    @param heat_maps:     List of 2D-arrays   Stack of heat maps.
-    @param max_value:     float         Maximum value of the heat maps.
-    @param heat_maps_bar:   List of 2D-arrays   Stack of heat maps (bar).
-    @param max_value_bar:   float         Maximum value of the heat maps (bar).
-    @param segment_height:  int         Height of each segment.
+    @param images:          List of 2D-arrays   Stack of heat maps.
+    @param mask:            2D-array            DFT mask
+    @param max_values:       [float, float]      Maximum value (bar )of the heat maps (bar).
+    @param max_focuses:       [float, float]      Maximum segment focus (bar) of the heat maps (bar).
+    @param segment_height:  int                 Height of each segment.
 
-    @return h_s_stack:    List of 1D-arrays   Focus evaluation for each segment.
+    @return [max_value, max_value_bar]  [float, float]      Updated Maximum value (bar) of the heat maps (bar).
+    @return [max_focus, max_focus_bar]  [float, float]      Updated Maximum segment focus (bar) of the heat maps (bar).
+    @return h_s_stack:                  List of 1D-arrays   Focus evaluation for each segment.
     """
 
-    max_value = 0
-    max_value_bar = 0
+    [max_value, max_value_bar] = max_values
+    [max_focus, max_focus_bar] = max_focuses
+
     heat_maps = []
     heat_maps_bar = []
 
     for image in images:
       res, res_bar = self.heat_double(image, mask)
-      max_value = max(max_value, np.max(res))
-      max_value_bar = max(max_value_bar, np.max(res_bar))
+      if not PREDICT:
+        max_value = max(max_value, np.max(res))
+        max_value_bar = max(max_value_bar, np.max(res_bar))
       heat_maps.append(res)
       heat_maps_bar.append(res_bar)
 
 
-    def __run_work(heat_maps, max_value):
+    def __run_work(heat_maps, max_value, max_focus):
       """
       @brief Helper function to compute focus evaluation for a stack of heat maps.
 
       This function calculates the histograms for each heat map, computes the activation weights using the `activation` function,
       and evaluates the focus distribution for each segment using the `horz_eval` function.
 
-      @param heat_maps:       List of 2D-arrays   Stack of heat maps.
-      @param max_value:       float         Maximum value of the heat maps.
+      @param heat_maps:           List of 2D-arrays   Stack of heat maps.
+      @param max_value:           float               Maximum value of the heat maps.
+      @param max_focus:           float               Maximum segment focus value.
 
-      @return max_focus:      float         Maximum focus value.
+      @return max_focus:          float               Updated Maximum focus value.
       @return h_segments_stack:   List of 1D-arrays   Focus evaluation for each segment.
       """
       hist_stack = np.empty(shape=(256, 0), dtype=np.uint32)
@@ -231,7 +236,6 @@ class Calibrate(ABC):
 
       weights = self.activation(hist_stack)
 
-      max_focus = 0
       h_segments_stack = []
 
       for heat_map in heat_map_stack:
@@ -242,8 +246,8 @@ class Calibrate(ABC):
       return max_focus, h_segments_stack
 
     h_segments_stack_double = [
-      __run_work(heat_maps, max_value),
-      __run_work(heat_maps_bar, max_value_bar),
+      __run_work(heat_maps, max_value, max_focus),
+      __run_work(heat_maps_bar, max_value_bar, max_focus_bar),
     ]
 
     h_segments_stack_united = []
@@ -253,7 +257,7 @@ class Calibrate(ABC):
       seg_focus_bar = seg_focus_bar / h_segments_stack_double[1][0]
       h_segments_stack_united += [np.amax([seg_focus, seg_focus_bar], axis=0)]
     
-    return h_segments_stack_united
+    return [max_value, max_value_bar], [h_segments_stack_double[0][0], h_segments_stack_double[1][0]], h_segments_stack_united
 
 
 
@@ -293,6 +297,24 @@ class CalibrateY(Calibrate):
                        the Y correction value in millimeters, and all the detected indexes.
         '''
 
+
+        try:
+          if (len(images) == 0):
+            return "error", f"No images provided", []
+          if (len(images[0].shape) != 2):
+            return "error", f"Image shape is incorrect", []
+        except:
+           return "error", f"Image should be an array object", [] 
+        
+        if (images[0].shape[0] != 2*mask.shape[0]) or (images[0].shape[1] != 2*mask.shape[1]):
+          return "error", f"Image shape or mask shape is incorrect", []
+        
+        if (type(segment_height) != int) or (segment_height == 0):
+          return "error", f"The segment height should be a non-zero positive integer", []
+        
+        if (type(region)!= int) or (region <= 0) or (region > images[0].shape[0]/2):
+          return "error", f"Invalid crossing distance", []
+
         return self.__calibrate_y(images, mask, segment_height, region)
 
     def __calibrate_y(self, images, mask, segment_height, region):
@@ -312,7 +334,7 @@ class CalibrateY(Calibrate):
         region = round(region / (2 * segment_height))
 
         # Evaluate image stack for horizontal segments
-        h_segments_stack = super().eval_stack(images, mask, segment_height)
+        _, _, h_segments_stack = super().eval_stack(images, mask, [0, 0], [0, 0], segment_height)
 
         # Calculate the number of segments
         nbr_segments = len(h_segments_stack[0])
@@ -349,7 +371,8 @@ class CalibrateY(Calibrate):
           all_indexes_max[idx] = all_indexes_max[idx] * 2 * segment_height
 
         # Check if enough acceptable images are available for calibration
-        if (nbr_images - nbr_filtered_images) > nbr_images / 2:
+        if nbr_filtered_images < nbr_images / 2:
+        #if np.std(all_indexes_max) > 15:
             return "error", f"too less of acceptable images available {nbr_filtered_images} / {nbr_images}", all_indexes_max
 
         # Calculate the Y correction value in millimeters
@@ -387,13 +410,34 @@ class CalibrateZ(Calibrate):
 
         @param images (list): List of images to perform Z calibration on.
         @param mask (numpy.ndarray): The DFT mask used for image processing.
-        @param roi (tuple): Tuple representing the region of interest (ROI) as (p1, p2).
+        @param roi (tuple): Tuple representing the region of interest (ROI) as (p1, p2).mask
         @param roi_correction (int): Correction factor for the ROI in segments.
         @param segment_height (int): Height of each segment in pixels.
 
         @return index (int):             Index of the calibrated Z position.
         @return h_segments[] (np.array): Segments evaluation of the best focused image
         '''
+
+        try:
+          if (len(images) == 0):
+            return "error", f"No images provided", []
+          if (len(images[0].shape) != 2):
+            return "error", f"Image shape is incorrect", []
+        except:
+           return "error", f"Image should be an array object", [] 
+        
+        if (images[0].shape[0] != 2*mask.shape[0]) or (images[0].shape[1] != 2*mask.shape[1]):
+          return "error", f"Image shape or mask shape is incorrect", []
+        
+        if abs(roi[0] - roi[1]) < segment_height:
+          return "error", f"Region of interest should be at least equal to one segment height", []
+        
+        if abs(roi_correction) > images[0].shape[0]//segment_height:
+          return "error", f"Region of interest correcttion is out of range", []
+        
+        if (type(segment_height) != int) or (segment_height == 0):
+          return "error", f"The segment height should be a non-zero positive integer", []
+
         return self.__calibrate_z(images, mask, roi, roi_correction, segment_height)
 
     def __calibrate_z(self, images, mask, roi, roi_correction, segment_height):
@@ -410,7 +454,7 @@ class CalibrateZ(Calibrate):
         @return h_segments[] (np.array): Segments evaluation of the best focused image  
         '''
 
-        h_segments_stack = super().eval_stack(images, mask, segment_height)
+        max_values, max_focuses , h_segments_stack = super().eval_stack(images, mask, [0, 0], [0, 0], segment_height)
 
         (p1, p2) = roi
         nbr_segments = len(h_segments_stack[0])
@@ -469,7 +513,7 @@ class CalibrateZ(Calibrate):
 
         index = np.where(dft_classifier == 1)[0][0]
 
-        return index, h_segments_stack[index]
+        return "ok", index, [max_values, max_focuses, h_segments_stack[index]]
 
 
 
@@ -484,15 +528,15 @@ class Predict(Calibrate):
     @attribute None
 
     @methods
-    - __call__(self, image, mask, segment_height, region, old_h_segment):
+    - __call__(self, [image], mask, segment_height, region, old_h_segment):
         Perform prediction for the given image.
 
-    - __predict(self, image, mask, segment_height, region, old_h_segment):
+    - __predict(self, [image], mask, segment_height, region, old_h_segment):
         Internal method to perform prediction for the given image.
 
     @usage
     ```
-    shift = Predict()(image, mask, segment_height, region, old_h_segment)
+    predict_flag, shift, focus_shift = Predict()([image], mask, segment_height, region, old_h_segment)
     ```
     '''
 
@@ -504,10 +548,34 @@ class Predict(Calibrate):
         @param mask (numpy.ndarray): The DFT mask used for image processing.
         @param segment_height (int): Height of each segment in pixels.
         @param region (int): Number of segments to consider for prediction.
-        @param old_h_segment (numpy.ndarray): Old focus evaluation results as 1D-array.
+        @param old_h_segment (numpy.ndarray): Old focus evaluation results.
 
         @return shift (float): Predicted shift in Z position in mm.
         '''
+
+        try:
+          if (len(image.shape) != 2):
+            return "error", f"Image shape is incorrect", []
+        except:
+           return "error", f"Image should be a 2D-array object", [] 
+        
+        if (image.shape[0] != 2*mask.shape[0]) or (image.shape[1] != 2*mask.shape[1]):
+          return "error", f"Image shape or mask shape is incorrect", []
+        
+        if (type(segment_height) != int) or (segment_height == 0):
+          return "error", f"The segment height should be a non-zero positive integer", []
+        
+        try:
+           if (len(old_h_segment) != 3):
+              return "error", f"old_h_segment is not valid", []
+        except:
+           return "error", f"old_h_segment is not valid", []
+        if (image.shape[0] // segment_height) != 2*len(old_h_segment[2]):
+          return "error", f"The number of segments in the old_h_segment and in the image should be equal", []
+        
+        if (type(region)!= int) or (region <= 0) or (region > image.shape[0]/2):
+          return "error", f"Invalid crossing distance", []
+
         return self.__predict(image, mask, segment_height, region, old_h_segment)
 
     def __predict(self, image, mask, segment_height, region, old_h_segment):
@@ -518,7 +586,7 @@ class Predict(Calibrate):
         @param mask (numpy.ndarray): The DFT mask used for image processing.
         @param segment_height (int): Height of each segment in pixels.
         @param region (int): Number of segments to consider for prediction.
-        @param old_h_segment (numpy.ndarray): Old focus evaluation results as 1D-array.
+        @param old_h_segment (numpy.ndarray): Old focus evaluation results.
 
         @return shift (float): Predicted shift in Z position in mm.
         '''
@@ -527,7 +595,9 @@ class Predict(Calibrate):
 
         region = round(region / (2 * segment_height))
 
-        new_h_segment = super().eval_stack([image, image], mask, segment_height)
+        [max_values, max_focuses, old_h_segment] = old_h_segment
+
+        max_values, max_focuses, new_h_segment = super().eval_stack([image], mask, max_values, max_focuses, segment_height, PREDICT=True)
 
         new_h_segment = new_h_segment[0]
 
@@ -544,7 +614,7 @@ class Predict(Calibrate):
 
         focus_shift = []
         for idx in range(len(old_regions)):
-            if index_best_new_region > index_best_old_region:
+            if new_regions[idx] > old_regions[idx]:
                 focus_shift.append(old_regions[idx] / new_regions[idx])
             else:
                 focus_shift.append(new_regions[idx] / old_regions[idx])
@@ -554,6 +624,6 @@ class Predict(Calibrate):
         if index_best_new_region > index_best_old_region:
             shift = (-1) * shift  # Move down
 
-        return shift
+        return "ok", float(shift), [max_values, max_focuses, focus_shift]
 
 
