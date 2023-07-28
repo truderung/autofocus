@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
-from statistics import mean, median
-from abc import ABC, abstractmethod
+from statistics import median
+from abc import ABC
 
 
 class Calibrate(ABC):
@@ -17,27 +17,24 @@ class Calibrate(ABC):
   - activation(self, hist_stack):
       Calculates the activation function for histogram-based image thresholding.
 
-  - horz_eval(self, img, weights, seg_height: int = 10):
+  - vertival_evaluation(self, img, weights, seg_height: int = 10):
       Evaluates the focus distribution along the vertical axis in an image.
 
   - heat_double(self, orig_img, mask):
       Heats the image in two halves using Discrete Fourier Transform (DFT).
 
   - eval_stack(self, images, mask, max_values, max_focuses, segment_height):
-      Evaluates the stack of heat maps and computes focus evaluation for each segment.
+      Evaluates the stack of images and computes focus evaluation for each segment.
 
   @usage
   ```
   # Create a subclass inheriting from Calibrate and implement abstract methods.
   class MyCalibrate(Calibrate):
-      # Implement abstract methods here.
-
-  # Create an instance of the subclass
-  calibrator = MyCalibrate()
+    # Implement abstract methods here.
 
   # Call the methods
   activation_weights = calibrator.activation(hist_stack)
-  focus_distribution = calibrator.horz_eval(image, activation_weights, segment_height)
+  focus_distribution = calibrator.vertival_evaluation(image, activation_weights, segment_height)
   heated_image, heated_image_bar = calibrator.heat_double(orig_img, mask)
   focus_evaluation = calibrator.eval_stack(images, mask, max_values, max_focuses, segment_height)
   ```
@@ -51,7 +48,7 @@ class Calibrate(ABC):
 
     @param hist_stack:    2D-array    Histogram stack containing cumulative histograms for multiple images.
 
-    @return filt_1:     1D-array    Activation function values for each gray level.
+    @return weights:      1D-array    Activation function values for each gray level.
     """
 
     hists = hist_stack.cumsum(1)[:, -1]
@@ -65,14 +62,13 @@ class Calibrate(ABC):
 
     def __run_work(x: int):
       """
-      @brief __runwork function used for calculating the activation value.
+      @brief __run_work function used for calculating the activation value.
 
       This function calculates the activation value based on the input x and threshold.
 
-      @param x:     int     Input value (gray level).
-      @param threshold: int     Activation threshold.
+      @param x:         int     Input value (gray level).
 
-      @return:      float   Activation value.
+      @return:          float   Activation value.
       """
       if x < threshold:
         return 0
@@ -83,26 +79,25 @@ class Calibrate(ABC):
     return weights
 
 
-  def horz_eval(self, img, weights, seg_height: int = 10):
+  def vertival_evaluation(self, img, weights, seg_height: int = 10):
     """
     @brief Evaluates the focus distribution along the vertical axis in an image.
 
     The image is divided into multiple horizontal segments, where each segment has the same width as the image and a height defined by the `seg_height` parameter.
 
-    @param img:    2D-array    Input image. Should be a one-channel grayscale image.
-    @param weights:  1D-array    Weight values used for focus evaluation. Determines the contribution of different gray values.
-    @param seg_height: int       Defines the segment height. Defaults to 40.
+    @param img:         2D-array    Input image. Should be a one-channel grayscale image.
+    @param weights:     1D-array    Weight values used for focus evaluation. Determines the contribution of different gray values.
+    @param seg_height:  int         Defines the segment height. Defaults to 40.
 
     @throws ValueError: If the input image has more than one channel.
 
-    @return seg_focus: 1D-array    Contains the focus evaluation for each segment.
+    @return seg_focus:  1D-array    Contains the focus evaluation for each segment.
     """
 
     if len(img.shape) != 2:
       raise ValueError("[ERROR]: Input image should be a one-channel image.")
 
-    cut = img.shape[0] % seg_height
-    top_cut = cut // 2
+    top_cut = (img.shape[0] % seg_height) // 2
 
     nbr_segments = img.shape[0] // seg_height
     seg_focus = np.zeros(nbr_segments, dtype=np.float64)
@@ -129,11 +124,11 @@ class Calibrate(ABC):
     It computes the DFT of the image, restricts it to the left and right halves, and applies the corresponding masks.
     The resulting heated images for each half are returned.
 
-    @param orig_img: 2D-array    Original image.
-    @param mask:   2D-array    Mask to be applied during the heating process.
+    @param orig_img:    2D-array    Original image.
+    @param mask:        2D-array    Mask to be applied during the heating process.
 
-    @return: res:    2D-array   Resulting heated image for the left half.
-    @return: res_bar:  2D-array   Resulting heated image for the right half.
+    @return: res:       2D-array    Resulting heated image for the left half.
+    @return: res_bar:   2D-array    Resulting heated image for the right half.
     """
 
     def __heat(dft_img, mask):
@@ -143,9 +138,9 @@ class Calibrate(ABC):
       This function applies the provided mask to the DFT image, performs inverse DFT, and calculates the magnitude.
 
       @param dft_img: 3D-array    DFT of the original image.
-      @param mask:  2D-array    Mask to be applied during the heating process.
+      @param mask:    2D-array    Mask to be applied during the heating process.
 
-      @return: res: 2D-array    Resulting heated image.
+      @return: res:   2D-array    Resulting heated image.
       """
 
       res = dft_img * np.dstack((mask, mask))
@@ -169,63 +164,65 @@ class Calibrate(ABC):
 
   def eval_stack(self, images, mask, max_values, max_focuses, segment_height, PREDICT=False):
     """
-    @brief Evaluates the stack of heat maps and computes focus evaluation for each segment.
+    @brief Evaluates a stack of images and computes focus evaluation for each segment in the image.
 
-    This function takes two stacks of heat maps, their corresponding maximum values, and the segment height as input.
+    This function takes a stack of images, a DFT mask, the maximum values to normalize the heated images, 
+      the max_focuses to normalize the evaluated segments, the segment height and the predict flag as input.
 
-    It calculates the histograms for each heat map, computes the activation weights,
-      and evaluates the focus distribution for each segment using the `horz_eval` function.
+    It heates the images using the `heat_double` function, computes the activation weights,
+      and evaluates the focus distribution for each segment using the `vertical_evaluation` function.
 
-    @param images:          List of 2D-arrays   Stack of heat maps.
+    @param images:          List of 2D-arrays   Stack of images.
     @param mask:            2D-array            DFT mask
-    @param max_values:       [float, float]      Maximum value (bar )of the heat maps (bar).
-    @param max_focuses:       [float, float]      Maximum segment focus (bar) of the heat maps (bar).
+    @param max_values:      [float, float]      Maximum value (bar )of the heated images (bar).
+    @param max_focuses:     [float, float]      Maximum segment focus (bar) of the heated images (bar).
     @param segment_height:  int                 Height of each segment.
+    @param PREDICT:         bool                Whether to predict or not. Default is False.
 
-    @return [max_value, max_value_bar]  [float, float]      Updated Maximum value (bar) of the heat maps (bar).
-    @return [max_focus, max_focus_bar]  [float, float]      Updated Maximum segment focus (bar) of the heat maps (bar).
+    @return [max_value, max_value_bar]  [float, float]      Updated Maximum value (bar) of the heated images (bar).
+    @return [max_focus, max_focus_bar]  [float, float]      Updated Maximum segment focus (bar) of the heated images (bar).
     @return h_s_stack:                  List of 1D-arrays   Focus evaluation for each segment.
     """
 
     [max_value, max_value_bar] = max_values
     [max_focus, max_focus_bar] = max_focuses
 
-    heat_maps = []
-    heat_maps_bar = []
+    heated_images = []
+    heated_images_bar = []
 
     for image in images:
       res, res_bar = self.heat_double(image, mask)
       if not PREDICT:
         max_value = max(max_value, np.max(res))
         max_value_bar = max(max_value_bar, np.max(res_bar))
-      heat_maps.append(res)
-      heat_maps_bar.append(res_bar)
+      heated_images.append(res)
+      heated_images_bar.append(res_bar)
 
 
-    def __run_work(heat_maps, max_value, max_focus):
+    def __run_work(heated_images, max_value, max_focus):
       """
-      @brief Helper function to compute focus evaluation for a stack of heat maps.
+      @brief Helper function to compute focus evaluation for a stack of heated images.
 
       This function calculates the histograms for each heat map, computes the activation weights using the `activation` function,
-      and evaluates the focus distribution for each segment using the `horz_eval` function.
+      and evaluates the focus distribution for each segment using the `vertival_evaluation` function.
 
-      @param heat_maps:           List of 2D-arrays   Stack of heat maps.
-      @param max_value:           float               Maximum value of the heat maps.
+      @param heated_images:       List of 2D-arrays   Stack of heated images.
+      @param max_value:           float               Maximum value of the heated images.
       @param max_focus:           float               Maximum segment focus value.
 
       @return max_focus:          float               Updated Maximum focus value.
       @return h_segments_stack:   List of 1D-arrays   Focus evaluation for each segment.
       """
       hist_stack = np.empty(shape=(256, 0), dtype=np.uint32)
-      heat_map_stack = []
+      heated_image_stack = []
 
-      for heat_map in heat_maps:
-        heat_map = (heat_map * 255 / max_value).astype(np.uint8)
+      for heated_image in heated_images:
+        heated_image = (heated_image * 255 / max_value).astype(np.uint8)
 
-        heat_map_stack += [heat_map]
+        heated_image_stack += [heated_image]
 
         hist = cv.calcHist(
-          images=[heat_map],
+          images=[heated_image],
           channels=[0],
           mask=None,
           histSize=[256],
@@ -238,17 +235,19 @@ class Calibrate(ABC):
 
       h_segments_stack = []
 
-      for heat_map in heat_map_stack:
-        seg_focus = self.horz_eval(heat_map, weights, segment_height)
+      for heated_image in heated_image_stack:
+        seg_focus = self.vertival_evaluation(heated_image, weights, segment_height)
         max_focus = np.max([max_focus, np.max(seg_focus)])
         h_segments_stack += [seg_focus]
 
       return max_focus, h_segments_stack
 
+
     h_segments_stack_double = [
-      __run_work(heat_maps, max_value, max_focus),
-      __run_work(heat_maps_bar, max_value_bar, max_focus_bar),
+      __run_work(heated_images, max_value, max_focus),
+      __run_work(heated_images_bar, max_value_bar, max_focus_bar),
     ]
+
 
     h_segments_stack_united = []
     for idx, seg_focus in enumerate(h_segments_stack_double[0][1]):
@@ -266,7 +265,7 @@ class CalibrateY(Calibrate):
   Class to perform Y calibration.
 
   @brief This class inherits from the `Calibrate` class and implements the Y calibration
-  process for a given set of images.
+    process for a given set of images.
 
   @attribute None
 
@@ -287,13 +286,13 @@ class CalibrateY(Calibrate):
     '''
     @brief Perform Y calibration for the given images.
 
-    @param images (list): List of images to perform Y calibration on.
-    @param mask (numpy.ndarray): The DFT mask used for image processing.
-    @param segment_height (int): Height of each image segment in pixels.
-    @param region (float): Distance between Crossing_points in pixels.
+    @param images:          List            List of images to perform Y calibration on.
+    @param mask:            numpy.ndarray   The DFT mask used for image processing.
+    @param segment_height:  int             Height of each image segment in pixels.
+    @param region:          float           Distance between Crossing_points in pixels.
 
-    @return tuple: A tuple containing the status of calibration ("ok" or "error"),
-             the Y correction value in millimeters, and all the detected indexes.
+    @return:                tuple            A tuple containing the status of calibration 
+      ("ok" or "error"), the Y correction value in millimeters, and all the detected indexes.
     '''
 
 
@@ -320,13 +319,13 @@ class CalibrateY(Calibrate):
     '''
     @brief Internal method to perform Y calibration for the given images.
 
-    @param images (list): List of images to perform Y calibration on.
-    @param mask (numpy.ndarray): The DFT mask used for image processing.
-    @param segment_height (int): Height of each image segment in pixels.
-    @param region (float): The region to analyze for Y calibration.
+    @param images:          List            List of images to perform Y calibration on.
+    @param mask:            numpy.ndarray   The DFT mask used for image processing.
+    @param segment_height:  int             Height of each image segment in pixels.
+    @param region:          float           Distance between Crossing_points in pixels.
 
-    @return tuple: A tuple containing the status of calibration ("ok" or "error"),
-             the Y correction value in millimeters, and all the detected indexes.
+    @return:                tuple            A tuple containing the status of calibration 
+      ("ok" or "error"), the Y correction value in millimeters, and all the detected indexes.
     '''
 
     # Convert region to segment units
@@ -399,7 +398,7 @@ class CalibrateZ(Calibrate):
 
   @usage
   ```
-  index, h_segments = CalibrateZ()(images, mask, roi, roi_correction, segment_height)
+  z_flag, index, old_h_segments = CalibrateZ()(images, mask, roi, roi_correction, segment_height)
   ```
   '''
 
@@ -407,14 +406,15 @@ class CalibrateZ(Calibrate):
     '''
     @brief Perform Z calibration for the given images.
 
-    @param images (list): List of images to perform Z calibration on.
-    @param mask (numpy.ndarray): The DFT mask used for image processing.
-    @param roi (tuple): Tuple representing the region of interest (ROI) as (p1, p2).mask
-    @param roi_correction (int): Correction factor for the ROI in segments.
-    @param segment_height (int): Height of each segment in pixels.
+    @param images:          List            List of images to perform Z calibration on.
+    @param mask:            numpy.ndarray   The DFT mask used for image processing.
+    @param roi:             tuple           Tuple representing the region of interest (ROI) as (p1, p2).mask
+    @param roi_correction:  int             Correction factor for the ROI in segments.
+    @param segment_height:  int             Height of each segment in pixels.
 
-    @return index (int):       Index of the calibrated Z position.
-    @return h_segments[] (np.array): Segments evaluation of the best focused image
+    @return:                tuple           A tuple containing the status of calibration 
+      ("ok" or "error"), the index of the best focus image in the stack, and the updated max_values, max_focuses 
+      and the h_segments of the choosen image.
     '''
 
     try:
@@ -443,14 +443,15 @@ class CalibrateZ(Calibrate):
     '''
     @brief Internal method to perform Z calibration for the given images.
 
-    @param images (list): List of images to perform Z calibration on.
-    @param mask (numpy.ndarray): The DFT mask used for image processing.
-    @param roi (tuple): Tuple representing the region of interest (ROI) as (p1, p2).
-    @param roi_correction (int): Correction factor for the ROI in segments.
-    @param segment_height (int): Height of each segment in pixels.
+    @param images:          List            List of images to perform Z calibration on.
+    @param mask:            numpy.ndarray   The DFT mask used for image processing.
+    @param roi:             tuple           Tuple representing the region of interest (ROI) as (p1, p2).mask
+    @param roi_correction:  int             Correction factor for the ROI in segments.
+    @param segment_height:  int             Height of each segment in pixels.
 
-    @return index (int):       Index of the calibrated Z position.
-    @return h_segments[] (np.array): Segments evaluation of the best focused image  
+    @return:                tuple           A tuple containing the status of calibration 
+      ("ok" or "error"), the index of the best focus image in the stack, and the updated max_values, max_focuses 
+      and the h_segments of the choosen image.
     '''
 
     max_values, max_focuses , h_segments_stack = super().eval_stack(images, mask, [0, 0], [0, 0], segment_height)
@@ -474,15 +475,15 @@ class CalibrateZ(Calibrate):
       @brief Calculates the activation weights for segments within the ROI.
 
       This function calculates the activation weights for each segment within the ROI based on the given parameters.
-      It applies a sigmoid-like activation function to assign weights to segments.
+        It applies a sigmoid-like activation function to assign weights to segments.
 
-      @param nbr_segment (int): Total number of segments.
-      @param center (int): Center segment index within the ROI.
-      @param breite (int): Half-width of the ROI (in segments).
-      @param min_coeff (float): Minimum weight value.
-      @param max_coeff (float): Maximum weight value.
+      @param nbr_segment:   int             Total number of segments.
+      @param center:        int             Center segment index within the ROI.
+      @param breite:        int             Half-width of the ROI (in segments).
+      @param min_coeff:     float           Minimum weight value.
+      @param max_coeff:     float           Maximum weight value.
 
-      @return weights (numpy.ndarray): Activation weights for each segment.
+      @return weights:      numpy.ndarray   Activation weights for each segment.
       '''
 
       s = (max_coeff - min_coeff) / breite
@@ -522,7 +523,7 @@ class Predict(Calibrate):
   Class to perform prediction.
 
   This class inherits from the `Calibrate` class and implements the prediction
-  process for a given set of images.
+    process for a given set of images.
 
   @attribute None
 
@@ -535,7 +536,7 @@ class Predict(Calibrate):
 
   @usage
   ```
-  predict_flag, shift, focus_shift = Predict()([image], mask, segment_height, region, old_h_segment)
+  predict_flag, shift, new_h_segment = Predict()(image, mask, segment_height, region, old_h_segment)
   ```
   '''
 
@@ -543,13 +544,15 @@ class Predict(Calibrate):
     '''
     @brief Perform prediction for the given image.
 
-    @param image (numpy.ndarray): Image to perform prediction on.
-    @param mask (numpy.ndarray): The DFT mask used for image processing.
-    @param segment_height (int): Height of each segment in pixels.
-    @param region (int): Number of segments to consider for prediction.
-    @param old_h_segment (numpy.ndarray): Old focus evaluation results.
+    @param image:           numpy.ndarray   Image to perform prediction on.
+    @param mask:            numpy.ndarray   The DFT mask used for image processing.
+    @param segment_height:  int             Height of each segment in pixels.
+    @param region:          int             Number of segments to consider for prediction.
+    @param old_h_segment:   numpy.ndarray   Old focus evaluation results.
 
-    @return shift (float): Predicted shift in Z position in mm.
+    @return:                tuple           A tuple containing the status of Prediction 
+      ("ok" or "error"), the correction in mm for the next snap, and the updated max_values, max_focuses 
+      and the h_segments.
     '''
 
     try:
@@ -580,14 +583,16 @@ class Predict(Calibrate):
   def __predict(self, image, mask, segment_height, region, old_h_segment):
     '''
     @brief Internal method to perform prediction for the given image.
+    
+    @param image:           numpy.ndarray   Image to perform prediction on.
+    @param mask:            numpy.ndarray   The DFT mask used for image processing.
+    @param segment_height:  int             Height of each segment in pixels.
+    @param region:          int             Number of segments to consider for prediction.
+    @param old_h_segment:   numpy.ndarray   Old focus evaluation results.
 
-    @param image (numpy.ndarray): Image to perform prediction on.
-    @param mask (numpy.ndarray): The DFT mask used for image processing.
-    @param segment_height (int): Height of each segment in pixels.
-    @param region (int): Number of segments to consider for prediction.
-    @param old_h_segment (numpy.ndarray): Old focus evaluation results.
-
-    @return shift (float): Predicted shift in Z position in mm.
+    @return:                tuple           A tuple containing the status of Prediction 
+      ("ok" or "error"), the correction in mm for the next snap, and the updated max_values, max_focuses 
+      and the h_segments.
     '''
 
     FOCUS_in_mm = 0.02  # in mm :: 5% Focus-Differenz entspricht einen Verschiebung von 0.1 mm => 1% entspricht 0.02 mm
