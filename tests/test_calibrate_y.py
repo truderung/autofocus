@@ -1,5 +1,4 @@
 from __internals__ import setup_mask, SEG_HEIGHT, CROSSING_DISTANCE_H, setup_y_calibrate
-import numpy as np
 
 from autofocus.toolbox.calibrators import CalibrateY
 

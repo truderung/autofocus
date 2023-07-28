@@ -1,5 +1,5 @@
 from pathlib import Path
-import cv2 as cv
+# import cv2 as cv
 
 from autofocus.toolbox.masker import Masker
 
