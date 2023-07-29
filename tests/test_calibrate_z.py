@@ -20,6 +20,19 @@ def test_z_calibration_valid(setup_mask, setup_z_calibrate):
   assert type(old_h_segment[1][0]) == np.float64
   assert z_flag == "ok"
 
+
+def test_z_calibration_one_image(setup_mask, setup_z_calibrate):
+  mask = setup_mask
+  data = setup_z_calibrate
+  z_flag, z_correction, old_h_segment = CalibrateZ()(data['one_image'], mask['mask_valid'], (350,1050), 0, SEG_HEIGHT)
+  assert type(z_correction) == np.int64
+  assert z_correction == 0
+  assert len(old_h_segment[2]) == 1400//SEG_HEIGHT
+  assert type(old_h_segment[0][0]) == np.float64
+  assert type(old_h_segment[1][0]) == np.float64
+  assert z_flag == "ok"
+
+
 def test_z_calibration_no_images(setup_mask, setup_z_calibrate):
   mask = setup_mask
   data = setup_z_calibrate

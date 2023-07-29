@@ -162,6 +162,7 @@ def setup_z_calibrate():
   z_calibrate = dict()
 
   z_calibrate["z_images_valid"] = z_images_valid
+  z_calibrate["one_image"] = [z_images_valid[3]]
   z_calibrate["empty"] = []
 
   yield z_calibrate
